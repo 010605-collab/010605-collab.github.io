@@ -261,14 +261,18 @@
         let tileCount = GRID_CELLS;
         
         function isMobile() {
-            return window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+            const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+            const isSmallScreen = window.innerWidth < 768;
+            return isTouchDevice && (isCoarsePointer || isSmallScreen);
         }
         
         function resizeCanvas() {
-            const maxWidth = isMobile() 
+            const mobile = isMobile();
+            const maxWidth = mobile 
                 ? Math.min(window.innerWidth * 0.95, 600)
                 : Math.min(window.innerWidth * 0.9, 600);
-            const maxHeight = isMobile() 
+            const maxHeight = mobile 
                 ? window.innerHeight * 0.50 
                 : window.innerHeight * 0.75;
             const size = Math.min(maxWidth, maxHeight);
@@ -285,7 +289,6 @@
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
         
-        // Устанавливаем правильный текст подсказки в стартовом экране
         const startHint = document.getElementById('startHint');
         if (isMobile()) {
             startHint.innerHTML = 'Листайте пальцем по экрану<br>или используйте кнопки';
@@ -314,40 +317,52 @@
         document.getElementById('highScore').textContent = highScore;
         
         class Particle {
-            constructor(x, y, color) {
+            constructor(x, y, color, gridSizeRef) {
                 this.x = x;
                 this.y = y;
-                this.vx = (Math.random() - 0.5) * 8;
-                this.vy = (Math.random() - 0.5) * 8;
+                
+                // Радиальный взрыв: случайный угол + скорость
+                const angle = Math.random() * Math.PI * 2;
+                // ДАЛЬНОСТЬ: уменьшена в 1.5 раза (было 0.6, стало 0.4)
+                const speed = (Math.random() * 0.4 + 0.13) * gridSizeRef;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                
                 this.life = 1;
                 this.color = color;
-                this.size = Math.random() * 4 + 2;
+                // Мельче: 5-15% от клетки
+                this.size = (Math.random() * 0.1 + 0.05) * gridSizeRef;
             }
             
             update() {
                 this.x += this.vx;
                 this.y += this.vy;
-                this.vy += 0.2;
-                this.life -= 0.03;
-                this.size *= 0.97;
+                // Трение/замедление
+                this.vx *= 0.96;
+                this.vy *= 0.96;
+                this.life -= 0.025;
+                this.size *= 0.98;
             }
             
             draw() {
-                ctx.globalAlpha = this.life;
+                if (this.life <= 0 || this.size <= 0.1) return;
+                
+                ctx.globalAlpha = Math.max(0, this.life);
                 ctx.fillStyle = this.color;
                 ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.arc(this.x, this.y, Math.max(0.1, this.size), 0, Math.PI * 2);
                 ctx.fill();
                 ctx.globalAlpha = 1;
             }
         }
         
         function createParticles(x, y, color) {
-            for (let i = 0; i < 12; i++) {
+            for (let i = 0; i < 20; i++) {
                 particles.push(new Particle(
                     x * gridSize + gridSize / 2,
                     y * gridSize + gridSize / 2,
-                    color
+                    color,
+                    gridSize
                 ));
             }
         }
@@ -448,7 +463,10 @@
                 ctx.stroke();
             }
             
-            const pulse = Math.sin(Date.now() / 200) * 3;
+            const pulseAmplitude = gridSize * 0.08;
+            const pulse = Math.sin(Date.now() / 200) * pulseAmplitude;
+            const baseRadius = gridSize * 0.4;
+            
             ctx.fillStyle = '#ff6b6b';
             ctx.shadowColor = '#ff6b6b';
             ctx.shadowBlur = 15;
@@ -456,12 +474,18 @@
             ctx.arc(
                 food.x * gridSize + gridSize / 2,
                 food.y * gridSize + gridSize / 2,
-                gridSize / 2 - 2 + pulse,
+                Math.max(2, baseRadius + pulse),
                 0,
                 Math.PI * 2
             );
             ctx.fill();
             ctx.shadowBlur = 0;
+            
+            const gap = gridSize * 0.05;
+            const headRadius = gridSize * 0.3;
+            const bodyRadius = gridSize * 0.2;
+            const eyeSize = gridSize * 0.12;
+            const eyeOffset = gridSize * 0.3;
             
             for (let i = 0; i < visualSnake.length; i++) {
                 const segment = visualSnake[i];
@@ -475,10 +499,10 @@
                     ctx.shadowBlur = 15;
                 }
                 
-                const x = segment.x * gridSize + 1;
-                const y = segment.y * gridSize + 1;
-                const size = gridSize - 2;
-                const radius = isHead ? 6 : 4;
+                const x = segment.x * gridSize + gap;
+                const y = segment.y * gridSize + gap;
+                const size = gridSize - gap * 2;
+                const radius = isHead ? headRadius : bodyRadius;
                 
                 ctx.beginPath();
                 ctx.roundRect(x, y, size, size, radius);
@@ -487,33 +511,32 @@
                 
                 if (isHead) {
                     ctx.fillStyle = '#000';
-                    const eyeSize = Math.max(2, gridSize * 0.15);
                     
                     if (direction.x === 1) {
                         ctx.beginPath();
-                        ctx.arc(x + size - 6, y + 6, eyeSize, 0, Math.PI * 2);
-                        ctx.arc(x + size - 6, y + size - 6, eyeSize, 0, Math.PI * 2);
+                        ctx.arc(x + size - eyeOffset, y + eyeOffset, eyeSize, 0, Math.PI * 2);
+                        ctx.arc(x + size - eyeOffset, y + size - eyeOffset, eyeSize, 0, Math.PI * 2);
                         ctx.fill();
                     } else if (direction.x === -1) {
                         ctx.beginPath();
-                        ctx.arc(x + 6, y + 6, eyeSize, 0, Math.PI * 2);
-                        ctx.arc(x + 6, y + size - 6, eyeSize, 0, Math.PI * 2);
+                        ctx.arc(x + eyeOffset, y + eyeOffset, eyeSize, 0, Math.PI * 2);
+                        ctx.arc(x + eyeOffset, y + size - eyeOffset, eyeSize, 0, Math.PI * 2);
                         ctx.fill();
                     } else if (direction.y === -1) {
                         ctx.beginPath();
-                        ctx.arc(x + 6, y + 6, eyeSize, 0, Math.PI * 2);
-                        ctx.arc(x + size - 6, y + 6, eyeSize, 0, Math.PI * 2);
+                        ctx.arc(x + eyeOffset, y + eyeOffset, eyeSize, 0, Math.PI * 2);
+                        ctx.arc(x + size - eyeOffset, y + eyeOffset, eyeSize, 0, Math.PI * 2);
                         ctx.fill();
                     } else if (direction.y === 1) {
                         ctx.beginPath();
-                        ctx.arc(x + 6, y + size - 6, eyeSize, 0, Math.PI * 2);
-                        ctx.arc(x + size - 6, y + size - 6, eyeSize, 0, Math.PI * 2);
+                        ctx.arc(x + eyeOffset, y + size - eyeOffset, eyeSize, 0, Math.PI * 2);
+                        ctx.arc(x + size - eyeOffset, y + size - eyeOffset, eyeSize, 0, Math.PI * 2);
                         ctx.fill();
                     }
                 }
             }
             
-            particles = particles.filter(p => p.life > 0);
+            particles = particles.filter(p => p.life > 0 && p.size > 0.1);
             particles.forEach(p => {
                 p.update();
                 p.draw();
@@ -571,7 +594,10 @@
             requestAnimationFrame(gameLoop);
         }
         
-        // Клавиатура
+        function isGameOver() {
+            return document.getElementById('gameOver').style.display === 'block';
+        }
+        
         document.addEventListener('keydown', (e) => {
             if (document.getElementById('startScreen').style.display !== 'none') {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -580,7 +606,7 @@
                 return;
             }
             
-            if (document.getElementById('gameOver').style.display === 'block') {
+            if (isGameOver()) {
                 if (e.key === 'Enter' || e.key === ' ') {
                     restartGame();
                 }
@@ -617,7 +643,6 @@
             }
         });
         
-        // Сенсорные кнопки
         document.querySelectorAll('.touch-btn').forEach(btn => {
             btn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
@@ -636,8 +661,7 @@
                 startGame();
                 return;
             }
-            if (document.getElementById('gameOver').style.display === 'block') {
-                restartGame();
+            if (isGameOver()) {
                 return;
             }
             
@@ -657,7 +681,6 @@
             }
         }
         
-        // === СВАЙПЫ ПО ВСЕМУ ЭКРАНУ ===
         document.addEventListener('touchstart', (e) => {
             const touch = e.touches[0];
             touchStartX = touch.clientX;
@@ -669,17 +692,19 @@
             const dx = touch.clientX - touchStartX;
             const dy = touch.clientY - touchStartY;
             
-            // Короткий тап — старт/рестарт
             if (Math.abs(dx) < SWIPE_THRESHOLD && Math.abs(dy) < SWIPE_THRESHOLD) {
                 if (document.getElementById('startScreen').style.display !== 'none') {
                     startGame();
-                } else if (document.getElementById('gameOver').style.display === 'block') {
-                    restartGame();
+                } else if (isGameOver()) {
+                    return;
                 }
                 return;
             }
             
-            // Свайп
+            if (isGameOver()) {
+                return;
+            }
+            
             if (Math.abs(dx) > Math.abs(dy)) {
                 handleDirection(dx > 0 ? 'right' : 'left');
             } else {
@@ -687,7 +712,6 @@
             }
         }, { passive: true });
         
-        // Блокировка скролла и зума
         document.addEventListener('touchmove', (e) => {
             e.preventDefault();
         }, { passive: false });
@@ -696,7 +720,6 @@
         document.addEventListener('gesturechange', (e) => e.preventDefault());
         document.addEventListener('gestureend', (e) => e.preventDefault());
         
-        // Начальная отрисовка
         resizeCanvas();
         ctx.fillStyle = '#0a0a0a';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
