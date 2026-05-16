@@ -241,7 +241,7 @@
         
         <div class="start-screen" id="startScreen">
             <h2>🐍 ЗМЕЙКА</h2>
-            <p>Листайте пальцем по экрану<br>или используйте кнопки</p>
+            <p id="startHint">Загрузка...</p>
             <button onclick="startGame()">ИГРАТЬ</button>
         </div>
         
@@ -284,6 +284,14 @@
         
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
+        
+        // Устанавливаем правильный текст подсказки в стартовом экране
+        const startHint = document.getElementById('startHint');
+        if (isMobile()) {
+            startHint.innerHTML = 'Листайте пальцем по экрану<br>или используйте кнопки';
+        } else {
+            startHint.innerHTML = 'Управление: стрелки или WASD<br>Нажмите ИГРАТЬ или пробел';
+        }
         
         let snake = [];
         let food = {};
@@ -649,20 +657,19 @@
             }
         }
         
-        // Свайпы по canvas
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
+        // === СВАЙПЫ ПО ВСЕМУ ЭКРАНУ ===
+        document.addEventListener('touchstart', (e) => {
             const touch = e.touches[0];
             touchStartX = touch.clientX;
             touchStartY = touch.clientY;
-        }, { passive: false });
+        }, { passive: true });
         
-        canvas.addEventListener('touchend', (e) => {
-            e.preventDefault();
+        document.addEventListener('touchend', (e) => {
             const touch = e.changedTouches[0];
             const dx = touch.clientX - touchStartX;
             const dy = touch.clientY - touchStartY;
             
+            // Короткий тап — старт/рестарт
             if (Math.abs(dx) < SWIPE_THRESHOLD && Math.abs(dy) < SWIPE_THRESHOLD) {
                 if (document.getElementById('startScreen').style.display !== 'none') {
                     startGame();
@@ -672,12 +679,13 @@
                 return;
             }
             
+            // Свайп
             if (Math.abs(dx) > Math.abs(dy)) {
                 handleDirection(dx > 0 ? 'right' : 'left');
             } else {
                 handleDirection(dy > 0 ? 'down' : 'up');
             }
-        }, { passive: false });
+        }, { passive: true });
         
         // Блокировка скролла и зума
         document.addEventListener('touchmove', (e) => {
