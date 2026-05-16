@@ -101,6 +101,10 @@
             align-items: center;
         }
         
+        .touch-controls.hidden {
+            display: none !important;
+        }
+        
         .touch-row {
             display: flex;
             gap: 8px;
@@ -113,7 +117,6 @@
             border: 2px solid rgba(0, 255, 136, 0.4);
             border-radius: 12px;
             color: #00ff88;
-            font-size: clamp(1.2rem, 4vw, 1.8rem);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -126,6 +129,28 @@
         .touch-btn:active {
             background: rgba(0, 255, 136, 0.4);
             transform: scale(0.95);
+        }
+        
+        .touch-btn svg {
+            width: 40%;
+            height: 40%;
+            fill: currentColor;
+        }
+        
+        .toggle-controls {
+            display: none;
+            margin-top: 8px;
+            color: #00ff88;
+            font-size: clamp(0.7rem, 2.5vw, 0.85rem);
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        
+        .toggle-controls:hover, .toggle-controls:active {
+            opacity: 1;
         }
         
         .game-over, .start-screen {
@@ -189,24 +214,15 @@
             box-shadow: 0 0 20px rgba(0, 255, 136, 0.6);
         }
         
-        @media (hover: none) and (pointer: coarse) {
-            .touch-controls {
-                display: flex;
-            }
-            .controls {
-                display: none;
-            }
-            canvas {
-                max-height: 50vh;
-            }
-        }
-        
         @media (hover: hover) and (pointer: fine) {
             .controls {
                 display: block;
             }
             .touch-controls {
-                display: none;
+                display: none !important;
+            }
+            .toggle-controls {
+                display: none !important;
             }
             canvas {
                 max-height: 75vh;
@@ -230,13 +246,25 @@
         
         <div class="touch-controls" id="touchControls">
             <div class="touch-row">
-                <div class="touch-btn" data-dir="up">▲</div>
+                <div class="touch-btn" data-dir="up">
+                    <svg viewBox="0 0 24 24"><path d="M12 4l-8 8h6v8h4v-8h6z"/></svg>
+                </div>
             </div>
             <div class="touch-row">
-                <div class="touch-btn" data-dir="left">◀</div>
-                <div class="touch-btn" data-dir="down">▼</div>
-                <div class="touch-btn" data-dir="right">▶</div>
+                <div class="touch-btn" data-dir="left">
+                    <svg viewBox="0 0 24 24"><path d="M4 12l8-8v6h8v4h-8v6z"/></svg>
+                </div>
+                <div class="touch-btn" data-dir="down">
+                    <svg viewBox="0 0 24 24"><path d="M12 20l8-8h-6V4h-4v8H4z"/></svg>
+                </div>
+                <div class="touch-btn" data-dir="right">
+                    <svg viewBox="0 0 24 24"><path d="M20 12l-8 8v-6H4v-4h8V4z"/></svg>
+                </div>
             </div>
+        </div>
+        
+        <div class="toggle-controls" id="toggleControls" onclick="toggleTouchControls()">
+            Скрыть кнопки ▲
         </div>
         
         <div class="start-screen" id="startScreen">
@@ -260,19 +288,26 @@
         let gridSize = 20;
         let tileCount = GRID_CELLS;
         
-        function isMobile() {
-            const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-            const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
-            const isSmallScreen = window.innerWidth < 768;
-            return isTouchDevice && (isCoarsePointer || isSmallScreen);
+        function isTouchDevice() {
+            return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        }
+        
+        function setupTouchUI() {
+            if (isTouchDevice()) {
+                document.getElementById('touchControls').style.display = 'flex';
+                document.getElementById('toggleControls').style.display = 'block';
+            } else {
+                document.getElementById('touchControls').style.display = 'none';
+                document.getElementById('toggleControls').style.display = 'none';
+            }
         }
         
         function resizeCanvas() {
-            const mobile = isMobile();
-            const maxWidth = mobile 
+            const isMobile = window.innerWidth < 768;
+            const maxWidth = isMobile 
                 ? Math.min(window.innerWidth * 0.95, 600)
                 : Math.min(window.innerWidth * 0.9, 600);
-            const maxHeight = mobile 
+            const maxHeight = isMobile 
                 ? window.innerHeight * 0.50 
                 : window.innerHeight * 0.75;
             const size = Math.min(maxWidth, maxHeight);
@@ -288,12 +323,28 @@
         
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
+        setupTouchUI();
         
         const startHint = document.getElementById('startHint');
-        if (isMobile()) {
+        if (isTouchDevice()) {
             startHint.innerHTML = 'Листайте пальцем по экрану<br>или используйте кнопки';
         } else {
             startHint.innerHTML = 'Управление: стрелки или WASD<br>Нажмите ИГРАТЬ или пробел';
+        }
+        
+        let controlsVisible = true;
+        function toggleTouchControls() {
+            const controls = document.getElementById('touchControls');
+            const toggle = document.getElementById('toggleControls');
+            controlsVisible = !controlsVisible;
+            
+            if (controlsVisible) {
+                controls.classList.remove('hidden');
+                toggle.textContent = 'Скрыть кнопки ▲';
+            } else {
+                controls.classList.add('hidden');
+                toggle.textContent = 'Показать кнопки ▼';
+            }
         }
         
         let snake = [];
@@ -320,24 +371,18 @@
             constructor(x, y, color, gridSizeRef) {
                 this.x = x;
                 this.y = y;
-                
-                // Радиальный взрыв: случайный угол + скорость
                 const angle = Math.random() * Math.PI * 2;
-                // ДАЛЬНОСТЬ: уменьшена в 1.5 раза (было 0.6, стало 0.4)
                 const speed = (Math.random() * 0.4 + 0.13) * gridSizeRef;
                 this.vx = Math.cos(angle) * speed;
                 this.vy = Math.sin(angle) * speed;
-                
                 this.life = 1;
                 this.color = color;
-                // Мельче: 5-15% от клетки
                 this.size = (Math.random() * 0.1 + 0.05) * gridSizeRef;
             }
             
             update() {
                 this.x += this.vx;
                 this.y += this.vy;
-                // Трение/замедление
                 this.vx *= 0.96;
                 this.vy *= 0.96;
                 this.life -= 0.025;
